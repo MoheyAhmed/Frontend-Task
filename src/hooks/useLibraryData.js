@@ -1,109 +1,124 @@
-// src/hooks/useLibraryData.js
-import { useEffect, useState, useMemo } from 'react';
+import { useMemo } from 'react'
+import { useLibrary } from '../context/LibraryContext'
 
-const useLibraryData = ({ storeId = null, searchTerm = '' } = {}) => {
-  // State for data
-  const [books, setBooks] = useState([]);
-  const [authors, setAuthors] = useState([]);
-  const [stores, setStores] = useState([]);
-  const [inventory, setInventory] = useState([]);
+const filterStoreBooks = ({ books, inventory, authorsById, storeId, searchTerm }) => {
+  const numericId = Number(storeId)
 
-  // Fetch all data
-  useEffect(() => {
-    fetch('/data/stores.json')
-      .then((response) => response.json())
-      .then((data) => setStores(Array.isArray(data) ? data : [data]))
-      .catch((error) => console.error('Error fetching stores:', error));
+  const items = inventory.filter((item) =>
+    Number.isNaN(numericId) ? true : Number(item.store_id) === numericId
+  )
 
-    fetch('/data/books.json')
-      .then((response) => response.json())
-      .then((data) => setBooks(Array.isArray(data) ? data : [data]))
-      .catch((error) => console.error('Error fetching books:', error));
-
-    fetch('/data/authors.json')
-      .then((response) => response.json())
-      .then((data) => setAuthors(Array.isArray(data) ? data : [data]))
-      .catch((error) => console.error('Error fetching authors:', error));
-
-    fetch('/data/inventory.json')
-      .then((response) => response.json())
-      .then((data) => setInventory(Array.isArray(data) ? data : [data]))
-      .catch((error) => console.error('Error fetching inventory:', error));
-  }, []);
-
-  // Create lookup maps
-  const authorMap = useMemo(() => {
-    return authors.reduce((map, author) => {
-      map[author.id] = { ...author, name: `${author.first_name} ${author.last_name}` };
-      return map;
-    }, {});
-  }, [authors]);
-
-  const storeMap = useMemo(() => {
-    return stores.reduce((map, store) => {
-      map[store.id] = store;
-      return map;
-    }, {});
-  }, [stores]);
-
-  // Filter books for a specific store (for Inventory page)
-  const storeBooks = useMemo(() => {
-    if (!storeId) return books;
-
-    const storeInventory = inventory.filter((item) => item.store_id === parseInt(storeId, 10));
-
-    let filteredBooks = books
-      .filter((book) => storeInventory.some((item) => item.book_id === book.id))
-      .map((book) => {
-        const inventoryItem = storeInventory.find((item) => item.book_id === book.id);
-        return { ...book, price: inventoryItem ? inventoryItem.price : null };
-      });
-
-    if (searchTerm.trim()) {
-      const lowerSearch = searchTerm.toLowerCase();
-      filteredBooks = filteredBooks.filter((book) =>
-        Object.values({ ...book, author_name: authorMap[book.author_id]?.name || 'Unknown Author' })
-          .some((value) => String(value).toLowerCase().includes(lowerSearch))
-      );
-    }
-
-    return filteredBooks;
-  }, [storeId, books, inventory, searchTerm, authorMap]);
-
-  // Map books to their stores (for Browse page)
-  const booksWithStores = useMemo(() => {
-    return books.map((book) => {
-      const bookInventory = inventory.filter((item) => item.book_id === book.id);
-      const bookStores = bookInventory.map((item) => ({
-        name: storeMap[item.store_id]?.name || 'Unknown Store',
-        price: item.price,
-      }));
+  const merged = items
+    .map((item) => {
+      const book = books.find((candidate) => candidate.id === item.book_id)
+      if (!book) {
+        return null
+      }
 
       return {
-        title: book.name,
-        author: authorMap[book.author_id]?.name || 'Unknown Author',
-        stores: bookStores,
-      };
-    });
-  }, [books, inventory, authorMap, storeMap]);
+        ...book,
+        inventoryId: item.id,
+        store_id: item.store_id,
+        price: item.price,
+        author_name: authorsById[book.author_id]
+          ? `${authorsById[book.author_id].first_name} ${authorsById[book.author_id].last_name}`
+          : 'Unknown Author',
+      }
+    })
+    .filter(Boolean)
 
-  // Loading state
-  const isLoading = !books.length || !authors.length || !stores.length || !inventory.length;
+  if (!searchTerm?.trim()) {
+    return merged
+  }
+
+  const lower = searchTerm.toLowerCase()
+
+  return merged.filter((entry) =>
+    Object.values(entry).some((value) => String(value).toLowerCase().includes(lower))
+  )
+}
+
+const mapBooksWithStores = ({ books, inventory, authorsById, storesById }) =>
+  books.map((book) => {
+    const related = inventory.filter((item) => item.book_id === book.id)
+    return {
+      title: book.name,
+      author: authorsById[book.author_id]
+        ? `${authorsById[book.author_id].first_name} ${authorsById[book.author_id].last_name}`
+        : 'Unknown Author',
+      stores: related.map((item) => ({
+        name: storesById[item.store_id]?.name ?? 'Unknown Store',
+        price: item.price,
+      })),
+    }
+  })
+
+const useLibraryData = ({ storeId = null, searchTerm = '' } = {}) => {
+  const {
+    books,
+    authors,
+    stores,
+    inventory,
+    status,
+    error,
+    setBooks,
+    setAuthors,
+    setStores,
+    setInventory,
+    authorsById,
+    storesById,
+    createInventoryItem,
+    updateInventoryItem,
+    deleteInventoryItem,
+  } = useLibrary()
+
+  const storeBooks = useMemo(
+    () =>
+      filterStoreBooks({
+        books,
+        inventory,
+        authorsById,
+        storeId,
+        searchTerm,
+      }),
+    [authorsById, books, inventory, searchTerm, storeId]
+  )
+
+  const booksWithStores = useMemo(
+    () =>
+      mapBooksWithStores({
+        books,
+        inventory,
+        authorsById,
+        storesById,
+      }),
+    [authorsById, books, inventory, storesById]
+  )
+
+  const authorMap = authorsById
+
+  const isLoading = status === 'idle' || status === 'loading'
 
   return {
     books,
     setBooks,
     authors,
+    setAuthors,
     stores,
+    setStores,
     inventory,
     setInventory,
     authorMap,
-    storeMap,
+    storesById,
     storeBooks,
     booksWithStores,
     isLoading,
-    currentStore: stores.find((store) => store.id === parseInt(storeId, 10)),
-  };
-};
+    error,
+    currentStore: stores.find((store) => store.id === Number(storeId)),
+    createInventoryItem,
+    updateInventoryItem,
+    deleteInventoryItem,
+  }
+}
 
-export default useLibraryData;
+export default useLibraryData

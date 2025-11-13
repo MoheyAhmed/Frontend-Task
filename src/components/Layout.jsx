@@ -1,15 +1,25 @@
-import { Outlet, NavLink } from 'react-router-dom';
-import Sidelist from './Sidelist/Sidelist';
-import Topbar from './Topbar';
+import { Outlet } from 'react-router-dom'
+import Sidelist from './Sidelist/Sidelist'
+import Topbar from './Topbar'
+import SignInModal from './auth/SignInModal'
+import MobileNav from './MobileNav'
 
 export default function Layout() {
   return (
-    <div className="h-screen flex ">
-              <Sidelist />
-      <main className="h-screen overflow-auto flex-1 bg-background pt-8 px-6">
-        <Topbar />
-        <Outlet />
-      </main>
-    </div>
-  );
+    <>
+      <SignInModal />
+      <div className="flex min-h-screen bg-background">
+        <aside className="hidden border-r border-slate-200 md:block">
+          <Sidelist />
+        </aside>
+        <main className="flex-1 overflow-y-auto px-4 pb-10 pt-4 md:px-8 md:pt-6">
+          <MobileNav />
+          <Topbar />
+          <div className="pt-4">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+    </>
+  )
 }

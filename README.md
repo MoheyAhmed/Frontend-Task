@@ -1,66 +1,119 @@
-# OVARC TASK
+# Ovarc Frontend Admin
+
+## Overview
+
+The bookstore dashboard now exposes full administrator tooling with authentication, inventory management, and a configurable data layer. The app can run against the bundled JSON fixtures (static mode), a built-in mock REST API powered by `json-server`, or an external backend by flipping a single environment flag.
 
 ## Tech Stack
-- **Vite**: Fast build tool and dev server.
-- **React Router**: Dynamic routing with code splitting.
-- **Tailwind CSS**: Utility-first CSS framework.
 
+- React 19 + Vite
+- React Router 7
+- Tailwind CSS utilities
+- TanStack Table v8
+- json-server (mock REST API)
+- ESLint (flat config)
 
-## Setup
-1. **Install dependencies**:
+## Getting Started
+
+### 1. Install dependencies
+
    ```bash
    npm install
    ```
-2. **Start the development server**:
+
+### 2. Configure the runtime
+
+Create a `.env` file in the project root (alongside `package.json`) and choose one of the following profiles:
+
+```ini
+# Use the bundled mock REST API (recommended for development)
+# mock / static
+VITE_API_SOURCE=mock
+
+VITE_MOCK_API_URL=http://localhost:4000
+
+MOCK_PORT=4000
+
+VITE_MOCK_USER_EMAIL=admin@ovarc.io
+VITE_MOCK_USER_PASSWORD=admin123
+
+```
+
+### 3. Run the mock API (optional but recommended)
+
+```bash
+npm run mock
+```
+
+The server boots on `http://localhost:4000` and exposes `/stores`, `/books`, `/authors`, `/inventory`, and `/login`.
+
+### 4. Start the web app
+
    ```bash
    npm run dev
    ```
 
-3. **Build for production**:
-   ```bash
-   npm run build
-   ```  
+Visit the printed Vite URL (usually `http://localhost:5173`). Sign in with the seeded admin user:
 
-## Features
-1. **Shop Page**: 
-   
-   It has a list of cards containing the book cover page, title & author, and which stores this book is available in. The sell button should mark this as sold but keep the card on the page.
+```
+Email:    admin@ovarc.io
+Password: admin123
+```
 
-2. **Authors Page** 
+### Additional scripts
 
-   It has a simple list of authors and two CTAs to edit the name (in-line edit) or delete the author entirely. There is a CTA & a modal too for adding a new author.
+| Command         | Description                         |
+|-----------------|-------------------------------------|
+| `npm run build` | Create a production build           |
+| `npm run lint`  | Run ESLint across the codebase      |
 
-3. **Books Page** 
+## Admin Features
 
-   It has a list of books, the number of pages, and who the author is. The edit CTA is an in-line edit for the book title.
+- **Authentication**
+  - No profile is shown until a user signs in.
+  - Email/password modal backed by the mock API.
+  - Sign out clears the persisted session.
+  - Guests can browse data but cannot mutate inventory, stores, books, or authors (buttons are disabled with sign-in prompts).
 
-4. **Stores Page** 
+- **Inventory Management (`/store/:id`)**
+  - Tabbed view: list of books or grouped by author.
+  - Search + column sorting for Book Id, Name, Pages, Author, and Price.
+  - Inline price editing with optimistic UX and server persistence.
+  - Delete books from the store inventory.
+  - Add books via a searchable dropdown (shows up to 7 matches) with price validation.
+  - Responsive layout and empty states.
 
-   Same as the above two. The entire row is a CTA for the next page.
+- **Stores / Books / Authors**
+  - Unified table experience with search, pagination, and sorting.
+  - Inline editing backed by the API.
+  - Creation & deletion modals with validation and loading guards.
+  - Store deletion also clears linked inventory entries.
 
-5. **Store Inventory Page**
+- **Data Layer**
+  - Centralised API client with environment-driven routing.
+  - Global library context keeps stores/books/authors/inventory in sync across pages.
+  - Graceful fallback to static JSON data when write operations are disabled.
 
-   This is where the admin adds more books to the store’s
-inventory. The books should be viewable either in a list view or grouped by the author via the tab selection. The add to inventory CTA pops up a modal to select the new book and set its price.
+- **Responsive Shell**
+  - Desktop sidebar + mobile navigation chips.
+  - Top bar shows the active route, authenticated user info, and auth actions.
 
-## Project Structure
-- src/pages/: Contains page components like Home, BrowseStores, Browse, BrowseAuthors, and Inventory.
+## Quality Notes
 
-- src/components/: Includes reusable UI components such as StoreCard, BookCard, AuthorCard, BooksTable, Modal, and Header.
+- ESLint passes (`npm run lint`).
+- Tailwind utility classes keep components lightweight; design tuned for mobile, tablet, and desktop widths.
+- Network mutations surface alerts on failure; additional toast system could be layered later if desired.
 
-- src/hooks/: Custom hooks like useLibraryData for data fetching and state management.
+## Time Spent
 
-- src/assets/: Stores static assets like author images (a1.png, a2.png).
+- Development & review: **≈4h 30m**
 
-- data/: JSON files (stores.json, books.json, authors.json, inventory.json) for mock data.
+## Next Steps & Known Gaps
 
-Routes
-- /: Home page with sections for Stores, Books, and Authors.
+- Integrate toast notifications for better mutation feedback.
+- Expand test coverage (unit + integration) around the context providers.
+- If a production backend exists, wire up authentication tokens and refresh flows.
 
-- /browse-stores: Browse all stores with their book counts and average prices.
+## License
 
-- /browse: Browse all books with their authors and store availability.
-
-- /browse-authors: Browse all authors with their published book counts.
-
-
+This challenge solution follows the original repository license (MIT).

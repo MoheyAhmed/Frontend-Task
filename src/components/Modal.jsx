@@ -2,16 +2,17 @@
 
 import React from 'react'
 
-const Modal = (
-    {
-        show,
-        setShow,
-        title,
-        save,
-        cancel,
-        children
-    }
-) => {
+const Modal = ({
+  show,
+  title,
+  save,
+  cancel,
+  children,
+  confirmLabel = 'Submit',
+  cancelLabel = 'Cancel',
+  disableSave = false,
+  disableCancel = false,
+}) => {
     return (
         <div className={`fixed inset-0 flex items-center justify-center bg-black/30 bg-opacity-50 ${show ? '' : 'hidden'}`}>
             <div className="bg-white rounded-xl shadow-lg w-xl overflow-hidden">
@@ -24,15 +25,17 @@ const Modal = (
                     
                     <button
                         onClick={cancel}
-                        className="text-main border border-main bg-white px-3 py-1.5 rounded"
+                        disabled={disableCancel}
+                        className="text-main border border-main bg-white px-3 py-1.5 rounded disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                        Cancel
+                        {cancelLabel}
                     </button>
                     <button
                         onClick={save}
-                        className="bg-main text-white px-3 py-1.5 rounded"
+                        disabled={disableSave}
+                        className="bg-main text-white px-3 py-1.5 rounded disabled:cursor-not-allowed disabled:bg-main/60"
                     >
-                        Submit
+                        {confirmLabel}
                     </button>
                 </div>
             </div>

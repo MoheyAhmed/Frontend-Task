@@ -1,67 +1,172 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import Header from '../components/Header';
-import Loading from './Loading';
-import Table from '../components/Table/Table';
-import { useSearchParams } from 'react-router-dom';
-import Modal from '../components/Modal';
-import TableActions from '../components/ActionButton/TableActions';
-import { useNavigate } from 'react-router-dom';
+import { useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import Header from '../components/Header'
+import Loading from './Loading'
+import Table from '../components/Table/Table'
+import Modal from '../components/Modal'
+import TableActions from '../components/ActionButton/TableActions'
+import useLibraryData from '../hooks/useLibraryData'
+import { libraryService } from '../services/libraryService'
+import { useAuth } from '../context/AuthContext'
+
+const buildFullAddress = ({ address_1, address_2, city, state, zip }) =>
+  [address_1, address_2, `${city}, ${state} ${zip}`.trim()].filter(Boolean).join(', ')
+
+const defaultStoreState = {
+  name: '',
+  address: '',
+}
 
 const Stores = () => {
-  const navigate = useNavigate();
-  
+  const navigate = useNavigate()
+  const { isAuthenticated, openModal: promptSignIn } = useAuth()
+  const { stores, setStores, setInventory, isLoading } = useLibraryData()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [editingRowId, setEditingRowId] = useState(null)
+  const [editName, setEditName] = useState('')
+  const [showModal, setShowModal] = useState(false)
+  const [newStore, setNewStore] = useState(defaultStoreState)
 
-  const handleViewStoreInventory = (storeId) => {
-    navigate(`/store/${storeId}`);
-  };  
+  const searchTerm = searchParams.get('search') ?? ''
 
-  // State declarations
-  const [stores, setStores] = useState([]);
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
-  const [editingRowId, setEditingRowId] = useState(null);
-  const [editName, setEditName] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [newStore, setNewStore] = useState({
-    name: '',
-    address: '',
-  });
+  const onRowClick = (_, row) => {
+    navigate(`/store/${row.id}`)
+  }
 
-  // Sync search term with URL query parameters
-  useEffect(() => {
-    const search = searchParams.get('search') || '';
-    setSearchTerm(search);
-  }, [searchParams]);
+  const handleOpenModal = () => {
+    if (!isAuthenticated) {
+      promptSignIn()
+      return
+    }
+    setShowModal(true)
+  }
 
-  // Fetch stores data
-  useEffect(() => {
-    fetch('/data/stores.json')
-      .then((response) => response.json())
-      .then((data) => {
-        console.log('Fetched stores:', data);
-        setStores(Array.isArray(data) ? data : [data]);
-      })
-      .catch((error) => console.error('Error fetching stores:', error));
-  }, []);
+  const closeModal = () => {
+    setShowModal(false)
+    setNewStore(defaultStoreState)
+  }
 
-  // Enrich stores with computed address and filter based on search term
   const filteredStores = useMemo(() => {
-    const enrichedStores = stores.map((store) => ({
+    const enriched = stores.map((store) => ({
       ...store,
-      full_address: `${store.address_1}${store.address_2 ? `, ${store.address_2}` : ''}, ${store.city}, ${store.state} ${store.zip}`,
-    }));
+      full_address: buildFullAddress(store),
+    }))
 
-    if (!searchTerm.trim()) return enrichedStores;
+    if (!searchTerm.trim()) {
+      return enriched
+    }
 
-    const lowerSearch = searchTerm.toLowerCase();
-    return enrichedStores.filter((store) =>
-      Object.values(store).some((value) =>
-        String(value).toLowerCase().includes(lowerSearch)
-      )
-    );
-  }, [stores, searchTerm]);
+    const lower = searchTerm.toLowerCase()
 
-  // Define table columns
+    return enriched.filter((store) =>
+      Object.values(store).some((value) => String(value).toLowerCase().includes(lower))
+    )
+  }, [searchTerm, stores])
+
+  const handleSearch = (value) => {
+    setSearchParams(value ? { search: value } : {})
+  }
+
+  const handleEdit = (store) => {
+    if (!isAuthenticated) {
+      promptSignIn()
+      return
+    }
+    setEditingRowId(store.id)
+    setEditName(store.name)
+  }
+
+  const handleCancel = () => {
+    setEditingRowId(null)
+    setEditName('')
+  }
+
+  const handleSave = async (id) => {
+    if (!editName.trim()) {
+      return
+    }
+
+    try {
+      const payload = { name: editName.trim() }
+      const updated = await libraryService.updateStore(id, payload)
+      setStores((prev) => prev.map((store) => (store.id === updated.id ? updated : store)))
+      setEditingRowId(null)
+      setEditName('')
+    } catch (error) {
+      alert(error.message ?? 'Failed to update store details')
+    }
+  }
+
+  const deleteStore = async (id, name) => {
+    if (!isAuthenticated) {
+      promptSignIn()
+      return
+    }
+
+    if (!window.confirm(`Are you sure you want to delete "${name}"?`)) {
+      return
+    }
+
+    try {
+      await libraryService.deleteStore(id)
+      setStores((prev) => prev.filter((store) => store.id !== id))
+      setInventory((prev) => prev.filter((item) => item.store_id !== id))
+      handleCancel()
+    } catch (error) {
+      alert(error.message ?? 'Failed to delete store')
+    }
+  }
+
+  const parseAddress = (address) => {
+    if (!address || !address.trim()) {
+      throw new Error('Address is required')
+    }
+
+    const parts = address.split(',').map((part) => part.trim())
+
+    if (parts.length < 3) {
+      throw new Error('Address must include street, city, state and zip')
+    }
+
+    const lastPart = parts[parts.length - 1]
+    const stateZipMatch = lastPart.match(/([A-Za-z]{2})\s+(\d{5})/)
+    if (!stateZipMatch) {
+      throw new Error('State and zip must follow the pattern "GA 30305"')
+    }
+
+    const city = parts[parts.length - 2]
+    const address_1 = parts[0]
+    const address_2 = parts.length > 3 ? parts[1] : ''
+
+    return {
+      address_1,
+      address_2,
+      city,
+      state: stateZipMatch[1],
+      zip: stateZipMatch[2],
+    }
+  }
+
+  const handleAddNew = async () => {
+    if (!newStore.name.trim()) {
+      alert('Store name is required')
+      return
+    }
+
+    try {
+      const parsedAddress = parseAddress(newStore.address)
+      const payload = {
+        name: newStore.name.trim(),
+        ...parsedAddress,
+      }
+      const created = await libraryService.createStore(payload)
+      setStores((prev) => [...prev, created])
+      closeModal()
+    } catch (error) {
+      alert(error.message ?? 'Failed to create store')
+    }
+  }
+
   const columns = useMemo(
     () => [
       { header: 'Store Id', accessorKey: 'id' },
@@ -73,12 +178,12 @@ const Stores = () => {
             <input
               type="text"
               value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSave(row.original.id);
-                if (e.key === 'Escape') handleCancel();
+              onChange={(event) => setEditName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') handleSave(row.original.id)
+                if (event.key === 'Escape') handleCancel()
               }}
-              className="border border-gray-300 rounded p-1 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded border border-slate-300 px-2 py-1 focus:border-main focus:outline-none focus:ring-1 focus:ring-main/40"
               autoFocus
             />
           ) : (
@@ -98,174 +203,67 @@ const Stores = () => {
                 : () => handleEdit(row.original)
             }
             onDelete={() => deleteStore(row.original.id, row.original.name)}
+            disableEdit={!isAuthenticated}
+            disableDelete={!isAuthenticated}
+            editTooltip={isAuthenticated ? 'Edit store name' : 'Sign in to edit'}
+            deleteTooltip={isAuthenticated ? 'Delete store' : 'Sign in to delete'}
           />
         ),
       },
     ],
-    [editingRowId, editName]
-  );
+    [deleteStore, editName, editingRowId, handleCancel, handleEdit, handleSave, isAuthenticated]
+  )
 
-  // Handle store deletion
-  const deleteStore = (id, name) => {
-    if (window.confirm(`Are you sure you want to delete "${name}"?`)) {
-      setStores((prevStores) => prevStores.filter((store) => store.id !== id));
-      setEditingRowId(null);
-      setEditName('');
-    }
-  };
-
-  // Initiate editing
-  const handleEdit = (store) => {
-    setEditingRowId(store.id);
-    setEditName(store.name);
-  };
-
-  // Save edited name
-  const handleSave = (id) => {
-    setStores(
-      stores.map((store) =>
-        store.id === id ? { ...store, name: editName } : store
-      )
-    );
-    setEditingRowId(null);
-    setEditName('');
-  };
-
-  // Cancel editing
-  const handleCancel = () => {
-    setEditingRowId(null);
-    setEditName('');
-  };
-
-  // Modal controls
-  const openModal = () => setShowModal(true);
-  const closeModal = () => {
-    setShowModal(false);
-    setNewStore({
-      name: '',
-      address: '',
-    });
-  };
-
-  // Parse address to extract address_1, address_2, city, state, and zip
-  const parseAddress = (address) => {
-    if (!address || address.trim() === '') {
-      return { address_1: '', address_2: '', city: '', state: '', zip: '' };
-    }
-
-    // Split the address by commas
-    const parts = address.split(',').map((part) => part.trim());
-
-
-    if (parts.length < 3) {
-      return { address_1: address, address_2: '', city: '', state: '', zip: '' };
-    }
-
-    // Last part should be "state zip"
-    const lastPart = parts[parts.length - 1].trim();
-    const stateZipMatch = lastPart.match(/(\w+)\s+(\d{5})/);
-    let state = '';
-    let zip = '';
-    if (stateZipMatch) {
-      state = stateZipMatch[1];
-      zip = stateZipMatch[2];
-    } else {
-      state = lastPart;
-      zip = '';
-    }
-
-    const city = parts[parts.length - 2];
-
-    const address_1 = parts[0];
-    const address_2 = parts.length > 3 ? parts[1] : '';
-
-    return { address_1, address_2, city, state, zip };
-  };
-
-  // Add new store
-  const handleAddNew = () => {
-    if (newStore.name.trim() === '' || newStore.address.trim() === '') {
-      alert('Store Name and Address are required');
-      return;
-    }
-
-    // Parse the address to extract fields
-    const { address_1, address_2, city, state, zip } = parseAddress(newStore.address);
-
-    if (!city || !state || !zip) {
-      alert('Address must include city, state, and zip (e.g., "123 Main St, Athens, GA 30605")');
-      return;
-    }
-
-    const newId = stores.length > 0 ? Math.max(...stores.map((s) => s.id)) + 1 : 1;
-    const newStoreObject = {
-      id: newId,
-      name: newStore.name,
-      address_1,
-      address_2,
-      city,
-      state,
-      zip,
-    };
-
-    setStores((prevStores) => [...prevStores, newStoreObject]);
-    setNewStore({
-      name: '',
-      address: '',
-    });
-    closeModal();
-  };
-  const onRowClick = (e, rw) => {
-    handleViewStoreInventory(rw.id);
-}
   return (
-    <div className="py-6">
-      <Header addNew={openModal} title="Stores List" />
-      {stores.length > 0 ? (
-        <Table data={filteredStores} columns={columns} onRowClick={onRowClick} />
-      ) : (
+    <div className="space-y-4">
+      <Header addNew={handleOpenModal} title="Stores List" onSearchChange={handleSearch} searchValue={searchTerm} />
+      {isLoading ? (
         <Loading />
+      ) : (
+        <Table data={filteredStores} columns={columns} onRowClick={onRowClick} />
       )}
       <Modal
         title="New Store"
         save={handleAddNew}
         cancel={closeModal}
         show={showModal}
-        setShow={setShowModal}
       >
-        <div className="flex flex-col gap-4 w-full">
+        <div className="flex w-full flex-col gap-4">
           <div>
-            <label htmlFor="name" className="block text-gray-700 font-medium mb-1">
+            <label htmlFor="store_name" className="mb-1 block text-sm font-medium text-slate-700">
               Store Name
             </label>
             <input
-              id="name"
+              id="store_name"
               type="text"
               value={newStore.name}
-              onChange={(e) => setNewStore({ ...newStore, name: e.target.value })}
-              className="border border-gray-300 rounded p-2 w-full"
+              onChange={(event) => setNewStore((prev) => ({ ...prev, name: event.target.value }))}
+              className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-main focus:outline-none focus:ring-1 focus:ring-main/40"
               placeholder="Enter Store Name"
-              required
             />
           </div>
           <div>
-            <label htmlFor="address" className="block text-gray-700 font-medium mb-1">
+            <label htmlFor="store_address" className="mb-1 block text-sm font-medium text-slate-700">
               Address
             </label>
             <input
-              id="address"
+              id="store_address"
               type="text"
               value={newStore.address}
-              onChange={(e) => setNewStore({ ...newStore, address: e.target.value })}
-              className="border border-gray-300 rounded p-2 w-full"
-              placeholder="e.g., 123 Main St, 2nd Floor, Athens, GA 30605"
-              required
+              onChange={(event) =>
+                setNewStore((prev) => ({
+                  ...prev,
+                  address: event.target.value,
+                }))
+              }
+              className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-main focus:outline-none focus:ring-1 focus:ring-main/40"
+              placeholder='123 Main St, Floor 2, Atlanta, GA 30305'
             />
           </div>
         </div>
       </Modal>
     </div>
-  );
-};
+  )
+}
 
-export default Stores;
+export default Stores

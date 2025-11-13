@@ -1,18 +1,13 @@
-import React from 'react'
-
-const ActionButton = ({
-    icon,
-    action
-}) => {
-  return (
-     <button
-                  onClick={action}
-                  className="bg-main grid place-items-center w-10 h-10 pointer-cursor"
-                >
-                  
-                  <img src={icon} alt="Action" className="w-4 h-4" />
-                </button>
-  )
-}
+const ActionButton = ({ icon, action, className = '', disabled = false, title }) => (
+  <button
+    type="button"
+    onClick={action}
+    disabled={disabled}
+    title={title}
+    className={`grid h-10 w-10 place-items-center rounded bg-main text-white transition hover:bg-main/90 disabled:cursor-not-allowed disabled:opacity-60 ${className}`.trim()}
+  >
+    <img src={icon} alt="Action" className="h-4 w-4" />
+  </button>
+)
 
 export default ActionButton

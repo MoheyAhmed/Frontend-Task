@@ -27,6 +27,7 @@ const Home = () => {
       const averagePrice = noOfBooks > 0 ? totalPrice / noOfBooks : 0;
 
       return {
+        id: store.id,
         name: store.name,
         noOfBooks,
         averagePrice,

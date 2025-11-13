@@ -1,5 +1,5 @@
 // src/components/StoreCard.jsx
-import { Navigate, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 const StoreCard = ({ name, noOfBooks, averagePrice, id }) => {
     
     const navigate = useNavigate();

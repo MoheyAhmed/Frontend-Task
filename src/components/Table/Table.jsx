@@ -1,14 +1,21 @@
 import { useReactTable, getCoreRowModel, getSortedRowModel, getPaginationRowModel, flexRender } from '@tanstack/react-table';
 import { useMemo, useState, useRef, useEffect } from 'react';
 
-export default function Table({ data, columns,onRowClick}) {
+export default function Table({
+  data,
+  columns,
+  onRowClick,
+  enableRowSelection = true,
+  pageSizeOptions = [10, 20, 50],
+  initialPageSize = 10,
+}) {
   const [rowSelection, setRowSelection] = useState({});
   const [pagination, setPagination] = useState({
     pageIndex: 0,
-    pageSize: 10
+    pageSize: initialPageSize,
   });
   const [sorting, setSorting] = useState([]);
-  
+
   // Add skip reset ref
   const skipPageResetRef = useRef(false);
 
@@ -19,28 +26,32 @@ export default function Table({ data, columns,onRowClick}) {
 
   const tableColumns = useMemo(
     () => [
-      {
-        id: 'select',
-        header: ({ table }) => (
-          <input
-            type="checkbox"
-            checked={table.getIsAllRowsSelected()}
-            onChange={table.getToggleAllRowsSelectedHandler()}
-            className="cursor-pointer"
-          />
-        ),
-        cell: ({ row }) => (
-          <input
-            type="checkbox"
-            checked={row.getIsSelected()}
-            onChange={row.getToggleSelectedHandler()}
-            className="cursor-pointer"
-          />
-        ),
-      },
+      ...(enableRowSelection
+        ? [
+            {
+              id: 'select',
+              header: ({ table }) => (
+                <input
+                  type="checkbox"
+                  checked={table.getIsAllRowsSelected()}
+                  onChange={table.getToggleAllRowsSelectedHandler()}
+                  className="cursor-pointer"
+                />
+              ),
+              cell: ({ row }) => (
+                <input
+                  type="checkbox"
+                  checked={row.getIsSelected()}
+                  onChange={row.getToggleSelectedHandler()}
+                  className="cursor-pointer"
+                />
+              ),
+            },
+          ]
+        : []),
       ...columns,
     ],
-    [columns]
+    [columns, enableRowSelection]
   );
 
   const table = useReactTable({
@@ -61,12 +72,6 @@ export default function Table({ data, columns,onRowClick}) {
     autoResetFilters: !skipPageResetRef.current,
   });
 
-  // Helper function to update data while preserving pagination
-  const updateData = (newData) => {
-    skipPageResetRef.current = true;
-    setData(newData);
-  };
-
   // Pagination controls
   const pageCount = table.getPageCount();
   const { pageIndex, pageSize } = table.getState().pagination;
@@ -75,17 +80,16 @@ export default function Table({ data, columns,onRowClick}) {
   const totalRows = data.length;
 
   return (
-    <div className="p-4">
-        <table className="w-full border-collapse border border-gray-200">
+    <div className="space-y-4">
+      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+        <table className="min-w-full border-collapse">
             <thead>
                 {table.getHeaderGroups().map((headerGroup) => (
-                    <tr key={headerGroup.id} className="bg-gray-100"
-                    
-                    >
+                    <tr key={headerGroup.id} className="bg-gray-100">
                         {headerGroup.headers.map((header) => (
                             <th
                                 key={header.id}
-                                className="border border-gray-200 p-2 text-left cursor-pointer font-medium text-gray-700"
+                                className="border border-gray-200 p-3 text-left text-sm font-medium text-gray-700"
                                 onClick={header.column.getToggleSortingHandler()}
                             >
                                 <div className="flex items-center space-x-1">
@@ -102,10 +106,12 @@ export default function Table({ data, columns,onRowClick}) {
                     </tr>
                 ))}
             </thead>
-            <tbody className="bg-white">
+            <tbody className="bg-white text-sm text-gray-800">
                 {table.getRowModel().rows.map((row) => (
-                    <tr key={row.id} className="hover:bg-gray-50 pointer-cursor"
-                    onClick={(e) => {
+                    <tr
+                      key={row.id}
+                      className="transition hover:bg-gray-50"
+                      onClick={(e) => {
                         
                         // Prevent row click when clicking on interactive elements (e.g., buttons, inputs)
                         if (
@@ -117,12 +123,13 @@ export default function Table({ data, columns,onRowClick}) {
                           return;
                         }
                        
+                        if (onRowClick) {
                           onRowClick(e, row.original);
-                        
+                        }
                       }}
                     >
                         {row.getVisibleCells().map((cell) => (
-                            <td key={cell.id} className="border border-gray-200 p-2 text-gray-800">
+                            <td key={cell.id} className="border border-gray-200 p-3 align-middle">
                                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
                             </td>
                         ))}
@@ -130,12 +137,13 @@ export default function Table({ data, columns,onRowClick}) {
                 ))}
             </tbody>
         </table>
-        <div className="mt-4 flex justify-end">
-            <div className="bg-white p-2 border border-gray-200 rounded flex items-center space-x-1">
+      </div>
+        <div className="flex justify-end">
+            <div className="flex items-center space-x-1 rounded border border-gray-200 bg-white p-2 text-sm">
                 <button
                     onClick={() => table.setPageIndex(0)}
                     disabled={pageIndex === 0}
-                    className="px-1 py-1 text-gray-600 disabled:opacity-50 text-sm"
+                    className="px-1 py-1 text-gray-600 disabled:opacity-50"
                     title="First Page"
                 >
                     {'<<'}
@@ -143,18 +151,18 @@ export default function Table({ data, columns,onRowClick}) {
                 <button
                     onClick={() => table.previousPage()}
                     disabled={!table.getCanPreviousPage()}
-                    className="px-1 py-1 text-gray-600 disabled:opacity-50 text-sm"
+                    className="px-1 py-1 text-gray-600 disabled:opacity-50"
                     title="Previous Page"
                 >
                     {'<'}
                 </button>
-                <span className="text-main text-sm">
+                <span className="text-main">
                     {startRow}-{endRow} of {totalRows}
                 </span>
                 <select
                     value={pageIndex}
                     onChange={(e) => table.setPageIndex(Number(e.target.value))}
-                    className="border border-gray-300 rounded px-1 py-1 text-main text-sm"
+                    className="rounded border border-gray-300 px-1 py-1 text-main"
                 >
                     {Array.from({ length: pageCount }, (_, i) => (
                         <option key={i} value={i}>
@@ -165,7 +173,7 @@ export default function Table({ data, columns,onRowClick}) {
                 <button
                     onClick={() => table.nextPage()}
                     disabled={!table.getCanNextPage()}
-                    className="px-1 py-1 text-gray-600 disabled:opacity-50 text-sm"
+                    className="px-1 py-1 text-gray-600 disabled:opacity-50"
                     title="Next Page"
                 >
                     {'>'}
@@ -173,11 +181,22 @@ export default function Table({ data, columns,onRowClick}) {
                 <button
                     onClick={() => table.setPageIndex(pageCount - 1)}
                     disabled={pageIndex === pageCount - 1}
-                    className="px-1 py-1 text-gray-600 disabled:opacity-50 text-sm"
+                    className="px-1 py-1 text-gray-600 disabled:opacity-50"
                     title="Last Page"
                 >
                     {'>>'}
                 </button>
+                <select
+                  value={pageSize}
+                  onChange={(event) => table.setPageSize(Number(event.target.value))}
+                  className="ml-2 rounded border border-gray-300 px-1 py-1 text-main"
+                >
+                  {pageSizeOptions.map((size) => (
+                    <option key={size} value={size}>
+                      {size} / page
+                    </option>
+                  ))}
+                </select>
             </div>
         </div>
     </div>
